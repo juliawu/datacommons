@@ -23,7 +23,7 @@ from datacommons_db.clients.spanner_client import (
     QueryResult,
     SpannerClient,
 )
-from datacommons_db.migrations.schema_comparator import (
+from datacommons_db.migrations.verification.comparator import (
     ColumnMetadata,
     ConstraintMetadata,
     PropertyGraphMetadata,

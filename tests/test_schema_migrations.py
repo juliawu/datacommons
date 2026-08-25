@@ -32,14 +32,14 @@ from pathlib import Path
 
 import pytest
 from datacommons_db.clients.spanner_client import ExecutionStatus, SpannerClient
-from datacommons_db.migrations.dependency_validator import (
-    assert_valid_ddl_topological_order,
-)
 from datacommons_db.migrations.migration_runner import MigrationRunner
-from datacommons_db.migrations.schema_comparator import (
+from datacommons_db.migrations.verification.comparator import (
     compare_schemas,
     extract_schema_metadata,
     load_ddl_statements,
+)
+from datacommons_db.migrations.verification.validator import (
+    assert_valid_ddl_topological_order,
 )
 from google.auth.credentials import AnonymousCredentials
 from google.cloud import spanner
@@ -50,6 +50,7 @@ SCHEMA_SQL_PATH = (
     / "datacommons-db"
     / "datacommons_db"
     / "migrations"
+    / "schemas"
     / "schema.sql"
 )
 
@@ -59,6 +60,7 @@ BASELINE_SQL_PATH = (
     / "datacommons-db"
     / "datacommons_db"
     / "migrations"
+    / "schemas"
     / "baseline_schema.sql"
 )
 

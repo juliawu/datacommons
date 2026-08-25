@@ -15,7 +15,7 @@
 """Unit tests for dependency_validator module."""
 
 import pytest
-from datacommons_db.migrations.dependency_validator import (
+from datacommons_db.migrations.verification.validator import (
     assert_valid_ddl_topological_order,
     validate_ddl_topological_order,
 )

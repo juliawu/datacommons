@@ -97,7 +97,7 @@ class Migration(SchemaMigration):
 
 ## 5. Golden `schema.sql` Synchronization
 
-Whenever you add or modify a migration script, you **must also update the golden `schema.sql` file** ([`packages/datacommons-db/datacommons_db/migrations/schema.sql`](../packages/datacommons-db/datacommons_db/migrations/schema.sql)).
+Whenever you add or modify a migration script, you **must also update the golden `schema.sql` file** ([`packages/datacommons-db/datacommons_db/migrations/schemas/schema.sql`](../packages/datacommons-db/datacommons_db/migrations/schemas/schema.sql)).
 
 `schema.sql` serves as the authoritative single source of truth for the complete database schema state. Automated CI tests will verify that applying all sequential migrations to a fresh database produces a schema strictly identical to executing `schema.sql` directly.
 
