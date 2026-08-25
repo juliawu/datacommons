@@ -95,15 +95,54 @@ class Migration(SchemaMigration):
 
 ---
 
-## 5. Verification & Testing
+## 5. Golden `schema.sql` Synchronization
+
+Whenever you add or modify a migration script, you **must also update the golden `schema.sql` file** ([`packages/datacommons-db/datacommons_db/migrations/schema.sql`](../packages/datacommons-db/datacommons_db/migrations/schema.sql)).
+
+`schema.sql` serves as the authoritative single source of truth for the complete database schema state. Automated CI tests will verify that applying all sequential migrations to a fresh database produces a schema strictly identical to executing `schema.sql` directly.
+
+---
+
+## 6. Verification & Testing
 
 Always verify that your migration script conforms to repository standards and passes automated tests:
 
+### 1. Validate Migration Script Syntax & Metadata
+Ensures your script follows the `YYYYMMDDHHMMSS_<change_name>.py` naming convention, has unique UTC ISO-8601 timestamps, and implements `upgrade()`:
 ```bash
-# 1. Validate your migration script syntax, timestamps, and structure
 uv run pytest packages/datacommons-db/tests/migrations/test_migration_scripts.py
+```
 
-# 2. Run linter and formatting checks
-uv run ruff check packages/datacommons-db/datacommons_db/migrations/
-uv run ruff format --check
+### 2. Validate Topological DDL Ordering & Comparator
+Verifies that statements conform to Spanner's 4-level compilation order (Base Tables → Edge Tables → Secondary Indexes → Property Graphs):
+```bash
+uv run pytest packages/datacommons-db/tests/migrations/test_dependency_validator.py packages/datacommons-db/tests/migrations/test_schema_comparator.py
+```
+
+### 3. Run End-to-End Migration Test (Cloud Spanner Emulator)
+Executes the dual-database migration verification test (`db_migrated` vs. `db_golden`):
+
+#### Start the Spanner Emulator via Docker:
+```bash
+# 1. Start the Spanner emulator container
+docker run -d --name spanner-emulator -p 9010:9010 -p 9020:9020 gcr.io/cloud-spanner-emulator/emulator
+
+# 2. Point client libraries to the local emulator
+export SPANNER_EMULATOR_HOST="localhost:9010"
+
+# 3. Run end-to-end schema migration test suite
+uv run pytest tests/test_schema_migrations.py -s
+```
+
+*(Optional) Stop the emulator container when finished:*
+```bash
+docker stop spanner-emulator && docker rm spanner-emulator
+```
+
+> **Note:** If `SPANNER_EMULATOR_HOST` is unset, static DDL syntax and topological ordering checks will still run, while live emulator tests are skipped gracefully.
+
+### 4. Run Linter and Formatting Checks
+```bash
+uv run ruff check packages/datacommons-db/datacommons_db/migrations/ tests/test_schema_migrations.py
+uv run ruff format --check packages/datacommons-db/datacommons_db/migrations/ tests/test_schema_migrations.py
 ```
