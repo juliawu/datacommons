@@ -38,6 +38,7 @@ CREATE TABLE Edge (
   object_id STRING(1024) NOT NULL,
   provenance STRING(1024) NOT NULL,
   last_update_timestamp TIMESTAMP OPTIONS (allow_commit_timestamp=true),
+  CONSTRAINT FK_Edge_Object_Node FOREIGN KEY (object_id) REFERENCES Node (subject_id) NOT ENFORCED,
 ) PRIMARY KEY(subject_id, predicate, object_id, provenance),
 INTERLEAVE IN Node, OPTIONS (
   columnar_policy = 'enabled'
