@@ -21,7 +21,7 @@ that migrations are idempotent.
 
 from datacommons_db.clients.spanner_client import ExecutionStatus
 from datacommons_db.migrations.migration_runner import MigrationRunner
-from datacommons_devtools.migrations.verification.comparator import (
+from datacommons_devtools.migrations.verification import (
     compare_schemas,
     extract_schema_metadata,
     load_ddl_statements,

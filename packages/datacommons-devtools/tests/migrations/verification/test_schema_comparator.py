@@ -24,7 +24,7 @@ from datacommons_db.clients.spanner_client import (
     QueryResult,
     SpannerClient,
 )
-from datacommons_devtools.migrations.verification.comparator import (
+from datacommons_devtools.migrations.verification import (
     ColumnMetadata,
     ConstraintMetadata,
     IndexColumnMetadata,

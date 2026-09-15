@@ -19,8 +19,14 @@ This module validates that database DDL statements execute in a sound dependency
 and migrations compile without ordering violations in Cloud Spanner.
 """
 
-import re
 from enum import IntEnum
+
+from datacommons_devtools.migrations.verification.parser import (
+    extract_graph_referenced_tables,
+    extract_parent_table_from_create,
+    extract_table_name_from_create,
+    extract_table_name_from_create_index,
+)
 
 
 class DdlDependencyLevel(IntEnum):
@@ -32,112 +38,55 @@ class DdlDependencyLevel(IntEnum):
     LEVEL_3_PROPERTY_GRAPH = 3  # Spanner Property Graph logical overlays
 
 
-def extract_table_name_from_create(stmt: str) -> str | None:
-    """Extract table name from CREATE TABLE statement."""
-    match = re.search(
-        r"CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?([A-Za-z0-9_]+)",
-        stmt,
-        re.IGNORECASE,
+def _validate_create_table(stmt: str, idx: int, declared_tables: set[str]) -> list[str]:
+    """Validate that an interleaved table's parent table was previously declared."""
+    table_name = extract_table_name_from_create(stmt)
+    parent_table = extract_parent_table_from_create(stmt)
+    errors: list[str] = []
+
+    if parent_table and parent_table not in declared_tables:
+        errors.append(
+            f"Statement #{idx} (CREATE TABLE {table_name}): Interleaved parent table "
+            f"'{parent_table}' has not been declared before '{table_name}'."
+        )
+
+    if table_name:
+        declared_tables.add(table_name)
+
+    return errors
+
+
+def _validate_create_index(stmt: str, idx: int, declared_tables: set[str]) -> list[str]:
+    """Validate that the target table for a secondary/vector index was previously declared."""
+    indexed_table = extract_table_name_from_create_index(stmt)
+    if indexed_table and indexed_table not in declared_tables:
+        return [
+            f"Statement #{idx} (CREATE INDEX): Target table '{indexed_table}' "
+            f"has not been declared before creating index."
+        ]
+    return []
+
+
+def _validate_create_property_graph(
+    stmt: str, idx: int, declared_tables: set[str]
+) -> list[str]:
+    """Validate that all node and edge tables referenced in a property graph were previously declared."""
+    node_tables, edge_tables = extract_graph_referenced_tables(stmt)
+    errors: list[str] = [
+        f"Statement #{idx} (CREATE PROPERTY GRAPH): Referenced node table '{nt}' "
+        f"has not been declared before creating property graph."
+        for nt in node_tables
+        if nt not in declared_tables
+    ]
+    errors.extend(
+        [
+            f"Statement #{idx} (CREATE PROPERTY GRAPH): Referenced edge table '{et}' "
+            f"has not been declared before creating property graph."
+            for et in edge_tables
+            if et not in declared_tables
+        ]
     )
-    return match.group(1) if match else None
-
-
-def extract_parent_table_from_create(stmt: str) -> str | None:
-    """Extract parent table name from INTERLEAVE IN [PARENT] clause."""
-    match = re.search(
-        r"INTERLEAVE\s+IN\s+(?:PARENT\s+)?([A-Za-z0-9_]+)", stmt, re.IGNORECASE
-    )
-    return match.group(1) if match else None
-
-
-def extract_table_name_from_create_index(stmt: str) -> str | None:
-    """Extract target table name from CREATE INDEX statement."""
-    match = re.search(
-        r"CREATE\s+(?:NULL_FILTERED\s+|UNIQUE\s+|VECTOR\s+)*INDEX\s+(?:IF\s+NOT\s+EXISTS\s+)?[A-Za-z0-9_]+\s+ON\s+([A-Za-z0-9_]+)",
-        stmt,
-        re.IGNORECASE,
-    )
-    return match.group(1) if match else None
-
-
-def extract_graph_referenced_tables(stmt: str) -> tuple[list[str], list[str]]:
-    """Extract node tables and edge tables referenced in CREATE PROPERTY GRAPH.
-
-    Args:
-        stmt: DDL statement string.
-
-    Returns:
-        Tuple of (node_table_names, edge_table_names).
-    """
-    node_tables: list[str] = []
-    edge_tables: list[str] = []
-
-    # Find NODE TABLES (...) block
-    node_block_match = re.search(
-        r"NODE\s+TABLES\s*\((.*?)\)\s*(?:EDGE\s+TABLES|$)",
-        stmt,
-        re.IGNORECASE | re.DOTALL,
-    )
-    if node_block_match:
-        node_block = node_block_match.group(1)
-        # Strip PROPERTIES(...), KEY(...), and LABEL <name>
-        cleaned = re.sub(
-            r"PROPERTIES\s*\([^)]*\)", "", node_block, flags=re.IGNORECASE | re.DOTALL
-        )
-        cleaned = re.sub(
-            r"KEY\s*\([^)]*\)", "", cleaned, flags=re.IGNORECASE | re.DOTALL
-        )
-        cleaned = re.sub(r"LABEL\s+[A-Za-z0-9_]+", "", cleaned, flags=re.IGNORECASE)
-        for word in re.findall(r"\b([A-Za-z0-9_]+)\b", cleaned):
-            if (
-                word.upper() not in ("AS", "SYNONYM", "NO", "DEFAULT")
-                and word not in node_tables
-            ):
-                node_tables.append(word)
-
-    # Find EDGE TABLES (...) block
-    edge_block_match = re.search(
-        r"EDGE\s+TABLES\s*\((.*?)\)\s*(?:;|$)", stmt, re.IGNORECASE | re.DOTALL
-    )
-    if edge_block_match:
-        edge_block = edge_block_match.group(1)
-        # Extract referenced node tables in REFERENCES <table_name>
-        for ref_match in re.finditer(
-            r"REFERENCES\s+([A-Za-z0-9_]+)", edge_block, re.IGNORECASE
-        ):
-            ref_table = ref_match.group(1)
-            if ref_table not in node_tables:
-                node_tables.append(ref_table)
-
-        # Strip SOURCE KEY, DESTINATION KEY, PROPERTIES, KEY, LABEL
-        cleaned = re.sub(
-            r"SOURCE\s+KEY\s*\([^)]*\)\s+REFERENCES\s+[A-Za-z0-9_]+(?:\s*\([^)]*\))?",
-            "",
-            edge_block,
-            flags=re.IGNORECASE | re.DOTALL,
-        )
-        cleaned = re.sub(
-            r"DESTINATION\s+KEY\s*\([^)]*\)\s+REFERENCES\s+[A-Za-z0-9_]+(?:\s*\([^)]*\))?",
-            "",
-            cleaned,
-            flags=re.IGNORECASE | re.DOTALL,
-        )
-        cleaned = re.sub(
-            r"PROPERTIES\s*\([^)]*\)", "", cleaned, flags=re.IGNORECASE | re.DOTALL
-        )
-        cleaned = re.sub(
-            r"KEY\s*\([^)]*\)", "", cleaned, flags=re.IGNORECASE | re.DOTALL
-        )
-        cleaned = re.sub(r"LABEL\s+[A-Za-z0-9_]+", "", cleaned, flags=re.IGNORECASE)
-
-        for word in re.findall(r"\b([A-Za-z0-9_]+)\b", cleaned):
-            if (
-                word.upper() not in ("AS", "SYNONYM", "NO", "DEFAULT")
-                and word not in edge_tables
-            ):
-                edge_tables.append(word)
-
-    return node_tables, edge_tables
+    return errors
 
 
 def validate_ddl_topological_order(ddl_statements: list[str]) -> list[str]:
@@ -166,50 +115,13 @@ def validate_ddl_topological_order(ddl_statements: list[str]) -> list[str]:
             continue
 
         upper_stmt = cleaned.upper()
-
-        # Check CREATE TABLE
         if upper_stmt.startswith("CREATE TABLE"):
-            table_name = extract_table_name_from_create(cleaned)
-            parent_table = extract_parent_table_from_create(cleaned)
-
-            if parent_table and parent_table not in declared_tables:
-                errors.append(
-                    f"Statement #{idx} (CREATE TABLE {table_name}): Interleaved parent table "
-                    f"'{parent_table}' has not been declared before '{table_name}'."
-                )
-
-            if table_name:
-                declared_tables.add(table_name)
-
-        # Check CREATE INDEX
+            errors.extend(_validate_create_table(cleaned, idx, declared_tables))
         elif "INDEX" in upper_stmt and upper_stmt.startswith("CREATE"):
-            indexed_table = extract_table_name_from_create_index(cleaned)
-            if indexed_table and indexed_table not in declared_tables:
-                errors.append(
-                    f"Statement #{idx} (CREATE INDEX): Target table '{indexed_table}' "
-                    f"has not been declared before creating index."
-                )
-
-        # Check CREATE PROPERTY GRAPH
+            errors.extend(_validate_create_index(cleaned, idx, declared_tables))
         elif "PROPERTY GRAPH" in upper_stmt:
-            node_tables, edge_tables = extract_graph_referenced_tables(cleaned)
-
             errors.extend(
-                [
-                    f"Statement #{idx} (CREATE PROPERTY GRAPH): Referenced node table '{nt}' "
-                    f"has not been declared before creating property graph."
-                    for nt in node_tables
-                    if nt not in declared_tables
-                ]
-            )
-
-            errors.extend(
-                [
-                    f"Statement #{idx} (CREATE PROPERTY GRAPH): Referenced edge table '{et}' "
-                    f"has not been declared before creating property graph."
-                    for et in edge_tables
-                    if et not in declared_tables
-                ]
+                _validate_create_property_graph(cleaned, idx, declared_tables)
             )
 
     return errors

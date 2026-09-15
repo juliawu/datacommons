@@ -18,9 +18,9 @@ Verifies that schema_latest.sql and schema_baseline.sql exist, are non-empty,
 and satisfy Spanner DDL topological dependency constraints.
 """
 
-from datacommons_devtools.migrations.verification.comparator import load_ddl_statements
-from datacommons_devtools.migrations.verification.validator import (
+from datacommons_devtools.migrations.verification import (
     assert_valid_ddl_topological_order,
+    load_ddl_statements,
 )
 
 from .conftest import SCHEMA_BASELINE_SQL_PATH, SCHEMA_LATEST_SQL_PATH

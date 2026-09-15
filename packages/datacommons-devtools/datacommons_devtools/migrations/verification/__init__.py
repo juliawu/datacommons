@@ -15,6 +15,12 @@
 """Schema migration verification, comparison, and topological ordering analysis."""
 
 from datacommons_devtools.migrations.verification.comparator import (
+    compare_schemas,
+)
+from datacommons_devtools.migrations.verification.extractor import (
+    extract_schema_metadata,
+)
+from datacommons_devtools.migrations.verification.models import (
     ColumnMetadata,
     ConstraintMetadata,
     IndexColumnMetadata,
@@ -24,17 +30,17 @@ from datacommons_devtools.migrations.verification.comparator import (
     SchemaMetadata,
     TableMetadata,
     canonical_sort_json,
-    compare_schemas,
-    extract_schema_metadata,
+)
+from datacommons_devtools.migrations.verification.parser import (
+    extract_graph_referenced_tables,
+    extract_parent_table_from_create,
+    extract_table_name_from_create,
+    extract_table_name_from_create_index,
     load_ddl_statements,
 )
 from datacommons_devtools.migrations.verification.validator import (
     DdlDependencyLevel,
     assert_valid_ddl_topological_order,
-    extract_graph_referenced_tables,
-    extract_parent_table_from_create,
-    extract_table_name_from_create,
-    extract_table_name_from_create_index,
     validate_ddl_topological_order,
 )
 
