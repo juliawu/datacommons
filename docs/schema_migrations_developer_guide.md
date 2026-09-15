@@ -190,6 +190,6 @@ docker stop spanner-emulator && docker rm spanner-emulator
 
 ### 4. Run Linter and Formatting Checks
 ```bash
-uv run ruff check packages/datacommons-db/datacommons_db/migrations/ packages/datacommons-devtools/
-uv run ruff format --check packages/datacommons-db/datacommons_db/migrations/ packages/datacommons-devtools/
+uv run ruff check packages/datacommons-db/datacommons_db/migrations/
+uv run ruff format --check packages/datacommons-db/datacommons_db/migrations/
 ```

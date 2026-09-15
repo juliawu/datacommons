@@ -12,7 +12,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Schema comparison and INFORMATION_SCHEMA metadata extraction for Spanner migrations."""
+"""Schema comparison, metadata extraction, and DDL parsing for Cloud Spanner database migrations.
+
+This module provides the core schema inspection and verification engine used to validate
+database migrations across the Data Commons Platform. It extracts `INFORMATION_SCHEMA`
+metadata from both databases and performs a deep structural diff to prove that both schemas
+are strictly identical.
+"""
 
 import json
 import logging

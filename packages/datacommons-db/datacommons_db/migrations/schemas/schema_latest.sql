@@ -12,6 +12,11 @@
 -- See the License for the specific language governing permissions and
 -- limitations under the License.
 
+-- Fileoverview: Authoritative target schema for Cloud Spanner database migrations.
+-- Defines the complete declarative DDL statements matching the expected database
+-- schema state after executing all existing chronological migrations. Used by the
+-- verification framework to validate schema parity, topological ordering, and integrity.
+
 -- 1. Schema Migrations History Table
 CREATE TABLE SchemaMigrations (
     SchemaMigrationId UUID NOT NULL DEFAULT (NEW_UUID()),

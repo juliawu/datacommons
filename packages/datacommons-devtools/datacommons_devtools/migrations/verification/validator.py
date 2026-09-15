@@ -12,7 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Topological dependency order validator for Spanner DDL statements and Property Graphs."""
+"""Topological dependency order validator for Cloud Spanner DDL statements and Property Graphs.
+
+This module validates that database DDL statements execute in a sound dependency order
+(base tables → interleaved tables → indexes → property graphs) so that schema creation
+and migrations compile without ordering violations in Cloud Spanner.
+"""
 
 import re
 from enum import IntEnum

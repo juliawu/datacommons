@@ -11,6 +11,12 @@
 -- WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 -- See the License for the specific language governing permissions and
 -- limitations under the License.
+
+-- Fileoverview: Baseline schema for Cloud Spanner database migrations.
+-- Defines the initial declarative DDL statements representing the starting database
+-- schema state before running migrations. Used by the schema verification framework
+-- to seed a fresh database prior to executing chronological migration scripts.
+
 CREATE TABLE Node (
   subject_id STRING(1024) NOT NULL,
   value STRING(MAX),
