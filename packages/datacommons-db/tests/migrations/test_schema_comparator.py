@@ -70,7 +70,7 @@ def test_compare_schemas_exact_match():
     tables = {"Node": TableMetadata("Node", "BASE TABLE")}
     cols = {
         ("Node", "subject_id"): ColumnMetadata(
-            "Node", "subject_id", 1, "STRING(1024)", "NO"
+            "Node", "subject_id", "STRING(1024)", "NO"
         )
     }
     consts = {
@@ -84,6 +84,23 @@ def test_compare_schemas_exact_match():
     schema_b = SchemaMetadata(
         tables=tables, columns=cols, constraints=consts, property_graphs=graphs
     )
+
+    result = compare_schemas(schema_a, schema_b)
+    assert result.is_match is True
+    assert result.differences == []
+
+
+def test_compare_schemas_different_column_order_matches():
+    cols_a = {
+        ("Node", "subject_id"): ColumnMetadata("Node", "subject_id", "STRING(1024)", "NO"),
+        ("Node", "name"): ColumnMetadata("Node", "name", "STRING(MAX)", "YES"),
+    }
+    cols_b = {
+        ("Node", "name"): ColumnMetadata("Node", "name", "STRING(MAX)", "YES"),
+        ("Node", "subject_id"): ColumnMetadata("Node", "subject_id", "STRING(1024)", "NO"),
+    }
+    schema_a = SchemaMetadata(columns=cols_a)
+    schema_b = SchemaMetadata(columns=cols_b)
 
     result = compare_schemas(schema_a, schema_b)
     assert result.is_match is True
@@ -121,8 +138,8 @@ def test_compare_schemas_table_type_or_parent_mismatch():
 
 
 def test_compare_schemas_column_mismatch():
-    cols_a = {("Node", "name"): ColumnMetadata("Node", "name", 1, "STRING(1024)", "NO")}
-    cols_b = {("Node", "name"): ColumnMetadata("Node", "name", 1, "STRING(MAX)", "YES")}
+    cols_a = {("Node", "name"): ColumnMetadata("Node", "name", "STRING(1024)", "NO")}
+    cols_b = {("Node", "name"): ColumnMetadata("Node", "name", "STRING(MAX)", "YES")}
 
     schema_a = SchemaMetadata(columns=cols_a)
     schema_b = SchemaMetadata(columns=cols_b)
@@ -134,10 +151,10 @@ def test_compare_schemas_column_mismatch():
 
 
 def test_compare_schemas_column_missing():
-    cols_a = {("Node", "name"): ColumnMetadata("Node", "name", 1, "STRING(MAX)", "NO")}
+    cols_a = {("Node", "name"): ColumnMetadata("Node", "name", "STRING(MAX)", "NO")}
     cols_b = {
-        ("Node", "name"): ColumnMetadata("Node", "name", 1, "STRING(MAX)", "NO"),
-        ("Node", "value"): ColumnMetadata("Node", "value", 2, "STRING(MAX)", "NO"),
+        ("Node", "name"): ColumnMetadata("Node", "name", "STRING(MAX)", "NO"),
+        ("Node", "value"): ColumnMetadata("Node", "value", "STRING(MAX)", "NO"),
     }
 
     schema_a = SchemaMetadata(columns=cols_a)
@@ -255,7 +272,7 @@ def test_extract_schema_metadata_with_mock_client():
         ),
         QueryResult(
             status=ExecutionStatus.SUCCESS,
-            rows=[["Node", "subject_id", 1, "STRING(1024)", "NO"]],
+            rows=[["Node", "subject_id", "STRING(1024)", "NO"]],
         ),
         QueryResult(
             status=ExecutionStatus.SUCCESS, rows=[["Node", "PK_Node", "subject_id", 1]]

@@ -48,14 +48,12 @@ class ColumnMetadata:
     Attributes:
         table_name: Table to which the column belongs.
         column_name: Name of the column.
-        ordinal_position: Position of column in table definition.
         spanner_type: Cloud Spanner data type (e.g. 'STRING(1024)').
         is_nullable: 'YES' if nullable, 'NO' otherwise.
     """
 
     table_name: str
     column_name: str
-    ordinal_position: int
     spanner_type: str
     is_nullable: str
 
@@ -265,7 +263,7 @@ def extract_schema_metadata(spanner_client: SpannerClient) -> SchemaMetadata:
 
     # 2. Query Columns
     columns_query = (
-        "SELECT table_name, column_name, ordinal_position, spanner_type, is_nullable "
+        "SELECT table_name, column_name, spanner_type, is_nullable "
         "FROM INFORMATION_SCHEMA.COLUMNS "
         "WHERE table_schema = '' "
         "ORDER BY table_name, column_name"
@@ -279,13 +277,11 @@ def extract_schema_metadata(spanner_client: SpannerClient) -> SchemaMetadata:
     columns: dict[tuple[str, str], ColumnMetadata] = {}
     for row in res_cols.rows:
         t_name, c_name = str(row[0]), str(row[1])
-        ord_pos = int(row[2])
-        sp_type = str(row[3])
-        nullable = str(row[4])
+        sp_type = str(row[2])
+        nullable = str(row[3])
         columns[(t_name, c_name)] = ColumnMetadata(
             table_name=t_name,
             column_name=c_name,
-            ordinal_position=ord_pos,
             spanner_type=sp_type,
             is_nullable=nullable,
         )
@@ -505,10 +501,6 @@ def compare_schemas(
         if ca.is_nullable.upper() != cb.is_nullable.upper():
             diffs.append(
                 f"Column '{t_name}.{c_name}' nullability mismatch: '{ca.is_nullable}' in {name_a} vs '{cb.is_nullable}' in {name_b}."
-            )
-        if ca.ordinal_position != cb.ordinal_position:
-            diffs.append(
-                f"Column '{t_name}.{c_name}' ordinal position mismatch: {ca.ordinal_position} in {name_a} vs {cb.ordinal_position} in {name_b}."
             )
 
     # 3. Compare Constraints & Key Column Usages
