@@ -155,6 +155,7 @@ CREATE PROPERTY GRAPH DCGraph
       KEY(subject_id)
       LABEL Node PROPERTIES(
         bytes,
+        last_update_timestamp,
         name,
         subject_id,
         types,
