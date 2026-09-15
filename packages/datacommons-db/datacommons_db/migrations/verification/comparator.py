@@ -161,7 +161,9 @@ class SchemaDiffResult:
 def load_ddl_statements(source: str | Path) -> list[str]:
     """Parse DDL statements from a SQL file or SQL string.
 
-    Strips SQL line comments (-- ...) and splits by semicolons.
+    Strips SQL line comments (-- ...), removes Jinja template blocks ({% ... %}),
+    and splits by semicolons. Unrendered templated DDL statements containing
+    placeholders (e.g. {{ embedding_table }}) are skipped with an informational log.
 
     Args:
         source: Path to a .sql file or a string containing DDL statements.
@@ -193,17 +195,26 @@ def load_ddl_statements(source: str | Path) -> list[str]:
     statements = []
     for stmt in raw_statements:
         stripped = stmt.strip()
-        # Ignore empty statements and unrendered template placeholders (e.g. {{ embedding_table }})
-        if stripped and "{{" not in stripped:
-            # The Spanner emulator does not support columnar_policy on indexes
-            if "INDEX" in stripped.upper():
-                stripped = re.sub(
-                    r"OPTIONS\s*\(\s*columnar_policy\s*=\s*'[^']*'\s*\)",
-                    "",
-                    stripped,
-                    flags=re.IGNORECASE,
-                ).strip()
-            statements.append(stripped)
+        if not stripped:
+            continue
+
+        # Skip unrendered template placeholders (e.g. {{ embedding_table }}) with logging
+        if "{{" in stripped:
+            logger.info(
+                "Skipping unrendered template DDL statement: %s...",
+                stripped.splitlines()[0][:60],
+            )
+            continue
+
+        # The Spanner emulator does not support columnar_policy on indexes
+        if "INDEX" in stripped.upper():
+            stripped = re.sub(
+                r"OPTIONS\s*\(\s*columnar_policy\s*=\s*'[^']*'\s*\)",
+                "",
+                stripped,
+                flags=re.IGNORECASE,
+            ).strip()
+        statements.append(stripped)
     return statements
 
 

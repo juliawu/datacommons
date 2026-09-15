@@ -15,6 +15,7 @@
 """Unit tests for schema_comparator module."""
 
 import json
+import logging
 from unittest.mock import MagicMock
 
 import pytest
@@ -52,6 +53,27 @@ def test_load_ddl_statements_parses_and_strips_comments():
     assert len(statements) == 2
     assert statements[0].startswith("CREATE TABLE Person")
     assert statements[1].startswith("CREATE INDEX idx_person")
+
+
+def test_load_ddl_statements_skips_unrendered_template_statements(caplog):
+    sql = """
+    CREATE TABLE Person (
+        id STRING(64) NOT NULL
+    ) PRIMARY KEY (id);
+
+    CREATE TABLE {{ embedding_table }} (
+        id STRING(64) NOT NULL
+    ) PRIMARY KEY (id);
+
+    CREATE INDEX idx_person ON Person(id);
+    """
+    with caplog.at_level(logging.INFO):
+        statements = load_ddl_statements(sql)
+
+    assert len(statements) == 2
+    assert statements[0].startswith("CREATE TABLE Person")
+    assert statements[1].startswith("CREATE INDEX idx_person")
+    assert "Skipping unrendered template DDL statement: CREATE TABLE {{ embedding_table }} (" in caplog.text
 
 
 def test_canonical_sort_json_recursively_sorts():
