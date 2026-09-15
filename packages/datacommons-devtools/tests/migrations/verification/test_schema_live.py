@@ -26,6 +26,7 @@ from datacommons_devtools.migrations.verification.comparator import (
     extract_schema_metadata,
     load_ddl_statements,
 )
+
 from .conftest import SCHEMA_BASELINE_SQL_PATH, SCHEMA_LATEST_SQL_PATH, step_progress
 
 
@@ -45,12 +46,17 @@ def test_migrated_schema_matches_target_schema(ephemeral_database_pair):
     with step_progress("[2/4] Executing migrations via MigrationRunner on Database A"):
         runner = MigrationRunner(spanner_client=client_migrated)
         migration_results = runner.run_migrations()
+        assert len(migration_results) > 0, (
+            "No migrations were discovered or executed on Database A"
+        )
         assert all(r.status == ExecutionStatus.SUCCESS for r in migration_results), (
             "One or more migrations failed during execution on Database A"
         )
 
     # 3. Setup Database B (Target): Apply schema_latest.sql directly
-    with step_progress("[3/4] Applying target schema_latest.sql DDL to Database B (Target)"):
+    with step_progress(
+        "[3/4] Applying target schema_latest.sql DDL to Database B (Target)"
+    ):
         target_ddls = load_ddl_statements(SCHEMA_LATEST_SQL_PATH)
         res_target = client_target.execute_ddl(target_ddls)
         assert res_target.status == ExecutionStatus.SUCCESS, (
@@ -86,7 +92,10 @@ def test_schema_migration_idempotency(ephemeral_database_pair):
         "[1/2] Seeding initial database and applying initial migrations"
     ):
         baseline_ddls = load_ddl_statements(SCHEMA_BASELINE_SQL_PATH)
-        client_migrated.execute_ddl(baseline_ddls)
+        res_baseline = client_migrated.execute_ddl(baseline_ddls)
+        assert res_baseline.status == ExecutionStatus.SUCCESS, (
+            f"Failed to apply baseline schema in idempotency test: {res_baseline.error_message}"
+        )
 
         runner = MigrationRunner(spanner_client=client_migrated)
         first_run = runner.run_migrations()
@@ -98,4 +107,3 @@ def test_schema_migration_idempotency(ephemeral_database_pair):
     ):
         second_run = runner.run_migrations()
         assert second_run == [], "Expected second migration run to be empty (no-op)"
-

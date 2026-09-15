@@ -23,8 +23,8 @@ import time
 import uuid
 from pathlib import Path
 
-import pytest
 import datacommons_db.migrations
+import pytest
 from datacommons_db.clients.spanner_client import SpannerClient
 from google.auth.credentials import AnonymousCredentials
 from google.cloud import spanner
@@ -71,17 +71,25 @@ def step_progress(step_title: str) -> collections.abc.Iterator[None]:
     stream = (
         sys.__stderr__ if hasattr(sys, "__stderr__") and sys.__stderr__ else sys.stderr
     )
+    is_tty = hasattr(stream, "isatty") and stream.isatty()
     start_time = time.time()
-    stream.write(f"\n  ⏳ {step_title}...")
-    stream.flush()
+    if is_tty:
+        stream.write(f"\n  ⏳ {step_title}...")
+        stream.flush()
     try:
         yield
         elapsed = time.time() - start_time
-        stream.write(f"\r  ✅ {step_title} ({elapsed:.2f}s)\n")
+        if is_tty:
+            stream.write(f"\r  ✅ {step_title} ({elapsed:.2f}s)\n")
+        else:
+            stream.write(f"  ✅ {step_title} ({elapsed:.2f}s)\n")
         stream.flush()
     except Exception:
         elapsed = time.time() - start_time
-        stream.write(f"\r  ❌ {step_title} (FAILED after {elapsed:.2f}s)\n")
+        if is_tty:
+            stream.write(f"\r  ❌ {step_title} (FAILED after {elapsed:.2f}s)\n")
+        else:
+            stream.write(f"  ❌ {step_title} (FAILED after {elapsed:.2f}s)\n")
         stream.flush()
         raise
 
@@ -165,4 +173,3 @@ def ephemeral_database_pair(spanner_instance):
                 for db in created_dbs:
                     with contextlib.suppress(Exception):
                         db.drop()
-

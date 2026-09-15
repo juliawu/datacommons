@@ -48,7 +48,7 @@ def extract_parent_table_from_create(stmt: str) -> str | None:
 def extract_table_name_from_create_index(stmt: str) -> str | None:
     """Extract target table name from CREATE INDEX statement."""
     match = re.search(
-        r"CREATE\s+(?:NULL_FILTERED\s+|UNIQUE\s+)*INDEX\s+(?:IF\s+NOT\s+EXISTS\s+)?[A-Za-z0-9_]+\s+ON\s+([A-Za-z0-9_]+)",
+        r"CREATE\s+(?:NULL_FILTERED\s+|UNIQUE\s+|VECTOR\s+)*INDEX\s+(?:IF\s+NOT\s+EXISTS\s+)?[A-Za-z0-9_]+\s+ON\s+([A-Za-z0-9_]+)",
         stmt,
         re.IGNORECASE,
     )
@@ -138,10 +138,13 @@ def extract_graph_referenced_tables(stmt: str) -> tuple[list[str], list[str]]:
 def validate_ddl_topological_order(ddl_statements: list[str]) -> list[str]:
     """Validate that a sequence of DDL statements conforms to topological dependency order.
 
-    Rules:
-    1. Base node tables (Level 0) must precede edge linking tables (Level 1) that interleave in them.
-    2. Tables (Levels 0 & 1) must precede secondary indexes (Level 2) defined on them.
-    3. Node and edge tables must precede Property Graph overlays (Level 3) referencing them.
+    Rules (per DdlDependencyLevel):
+    1. Base tables (DdlDependencyLevel.LEVEL_0_BASE_TABLE) must precede edge tables
+       (DdlDependencyLevel.LEVEL_1_EDGE_TABLE) that interleave in them.
+    2. Tables (Levels 0 & 1) must precede secondary/vector indexes
+       (DdlDependencyLevel.LEVEL_2_SECONDARY_INDEX) defined on them.
+    3. Node and edge tables must precede Property Graph overlays
+       (DdlDependencyLevel.LEVEL_3_PROPERTY_GRAPH) referencing them.
 
     Args:
         ddl_statements: List of DDL statement strings in execution sequence.
@@ -151,7 +154,6 @@ def validate_ddl_topological_order(ddl_statements: list[str]) -> list[str]:
     """
     errors: list[str] = []
     declared_tables: set[str] = set()
-    declared_indexes: set[str] = set()
 
     for idx, stmt in enumerate(ddl_statements, start=1):
         cleaned = stmt.strip()
@@ -182,14 +184,6 @@ def validate_ddl_topological_order(ddl_statements: list[str]) -> list[str]:
                     f"Statement #{idx} (CREATE INDEX): Target table '{indexed_table}' "
                     f"has not been declared before creating index."
                 )
-            # Record index name if found
-            idx_name_match = re.search(
-                r"CREATE\s+(?:UNIQUE\s+)?INDEX\s+(?:IF\s+NOT\s+EXISTS\s+)?([A-Za-z0-9_]+)",
-                cleaned,
-                re.IGNORECASE,
-            )
-            if idx_name_match:
-                declared_indexes.add(idx_name_match.group(1))
 
         # Check CREATE PROPERTY GRAPH
         elif "PROPERTY GRAPH" in upper_stmt:

@@ -186,7 +186,7 @@ uv run pytest packages/datacommons-devtools/tests/migrations/verification/test_s
 docker stop spanner-emulator && docker rm spanner-emulator
 ```
 
-> **Note:** If `SPANNER_EMULATOR_HOST` is unset, static DDL syntax and topological ordering checks will still run, while live emulator tests are skipped gracefully.
+> **Note:** If `SPANNER_EMULATOR_HOST` is unset, static DDL syntax and topological ordering checks will still run, but live emulator tests are skipped.
 
 ### 4. Run Linter and Formatting Checks
 ```bash
