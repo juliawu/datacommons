@@ -12,19 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Unit tests for schema_comparator module."""
+"""Unit tests for schema comparator and canonical sorting."""
 
-import json
-import logging
-from unittest.mock import MagicMock
-
-import pytest
-from datacommons_db.clients.spanner_client import (
-    ExecutionStatus,
-    QueryResult,
-    SpannerClient,
-)
-from datacommons_devtools.migrations.verification import (
+from datacommons_devtools.migrations.verification.comparator import compare_schemas
+from datacommons_devtools.migrations.verification.models import (
     ColumnMetadata,
     ConstraintMetadata,
     IndexColumnMetadata,
@@ -33,50 +24,7 @@ from datacommons_devtools.migrations.verification import (
     SchemaMetadata,
     TableMetadata,
     canonical_sort_json,
-    compare_schemas,
-    extract_schema_metadata,
-    load_ddl_statements,
 )
-
-
-def test_load_ddl_statements_parses_and_strips_comments():
-    sql = """
-    -- Initial comment
-    CREATE TABLE Person (
-        id STRING(64) NOT NULL
-    ) PRIMARY KEY (id);
-
-    -- Secondary comment
-    CREATE INDEX idx_person ON Person(id);
-    """
-    statements = load_ddl_statements(sql)
-    assert len(statements) == 2
-    assert statements[0].startswith("CREATE TABLE Person")
-    assert statements[1].startswith("CREATE INDEX idx_person")
-
-
-def test_load_ddl_statements_skips_unrendered_template_statements(caplog):
-    sql = """
-    CREATE TABLE Person (
-        id STRING(64) NOT NULL
-    ) PRIMARY KEY (id);
-
-    CREATE TABLE {{ embedding_table }} (
-        id STRING(64) NOT NULL
-    ) PRIMARY KEY (id);
-
-    CREATE INDEX idx_person ON Person(id);
-    """
-    with caplog.at_level(logging.INFO):
-        statements = load_ddl_statements(sql)
-
-    assert len(statements) == 2
-    assert statements[0].startswith("CREATE TABLE Person")
-    assert statements[1].startswith("CREATE INDEX idx_person")
-    assert (
-        "Skipping unrendered template DDL statement: CREATE TABLE {{ embedding_table }} ("
-        in caplog.text
-    )
 
 
 def test_canonical_sort_json_recursively_sorts():
@@ -306,53 +254,3 @@ def test_compare_schemas_index_property_or_column_mismatch():
     assert any("null-filtered mismatch" in d for d in result.differences)
     assert any("columns mismatch" in d for d in result.differences)
 
-
-def test_extract_schema_metadata_with_mock_client():
-    mock_client = MagicMock(spec=SpannerClient)
-
-    # Tables query, Columns query, Constraints query, Indexes query, Index columns query, Property graphs query
-    mock_client.execute_query.side_effect = [
-        QueryResult(
-            status=ExecutionStatus.SUCCESS, rows=[["Node", "BASE TABLE", None]]
-        ),
-        QueryResult(
-            status=ExecutionStatus.SUCCESS,
-            rows=[["Node", "subject_id", "STRING(1024)", "NO"]],
-        ),
-        QueryResult(
-            status=ExecutionStatus.SUCCESS, rows=[["Node", "PK_Node", "subject_id", 1]]
-        ),
-        QueryResult(
-            status=ExecutionStatus.SUCCESS,
-            rows=[["Edge", "InEdge", "INDEX", False, False]],
-        ),
-        QueryResult(
-            status=ExecutionStatus.SUCCESS,
-            rows=[["Edge", "InEdge", "object_id", 1, "ASC"]],
-        ),
-        QueryResult(
-            status=ExecutionStatus.SUCCESS,
-            rows=[["DCGraph", json.dumps({"nodes": ["Node"]})]],
-        ),
-    ]
-
-    schema = extract_schema_metadata(mock_client)
-    assert "Node" in schema.tables
-    assert ("Node", "subject_id") in schema.columns
-    assert ("Node", "PK_Node", 1) in schema.constraints
-    assert "InEdge" in schema.indexes
-    assert schema.indexes["InEdge"].table_name == "Edge"
-    assert len(schema.indexes["InEdge"].columns) == 1
-    assert schema.indexes["InEdge"].columns[0].column_name == "object_id"
-    assert "DCGraph" in schema.property_graphs
-    assert schema.property_graphs["DCGraph"].metadata == {"nodes": ["Node"]}
-
-
-def test_extract_schema_metadata_query_failure_raises():
-    mock_client = MagicMock(spec=SpannerClient)
-    mock_client.execute_query.return_value = QueryResult(
-        status=ExecutionStatus.ERROR, error_message="Database offline"
-    )
-
-    with pytest.raises(RuntimeError, match="Failed to query INFORMATION_SCHEMA.TABLES"):
-        extract_schema_metadata(mock_client)

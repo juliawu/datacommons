@@ -43,6 +43,12 @@ from datacommons_devtools.migrations.verification.validator import (
     assert_valid_ddl_topological_order,
     validate_ddl_topological_order,
 )
+from datacommons_devtools.migrations.verification.verifier import (
+    assert_valid_static_schema,
+    verify_migrated_schema,
+    verify_migration_idempotency,
+    verify_static_schema,
+)
 
 __all__ = [
     "ColumnMetadata",
@@ -55,6 +61,7 @@ __all__ = [
     "SchemaMetadata",
     "TableMetadata",
     "assert_valid_ddl_topological_order",
+    "assert_valid_static_schema",
     "canonical_sort_json",
     "compare_schemas",
     "extract_graph_referenced_tables",
@@ -64,4 +71,7 @@ __all__ = [
     "extract_table_name_from_create_index",
     "load_ddl_statements",
     "validate_ddl_topological_order",
+    "verify_migrated_schema",
+    "verify_migration_idempotency",
+    "verify_static_schema",
 ]

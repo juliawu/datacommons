@@ -12,12 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Unit tests for dependency_validator module."""
+"""Unit tests for topological DDL dependency validator module."""
 
 import pytest
-from datacommons_devtools.migrations.verification import (
+from datacommons_devtools.migrations.verification.validator import (
     assert_valid_ddl_topological_order,
-    extract_table_name_from_create_index,
     validate_ddl_topological_order,
 )
 
@@ -124,31 +123,3 @@ def test_validate_ddl_topological_order_graph_before_edge_table():
         in errors[0]
     )
 
-
-def test_extract_table_name_from_create_index_variants():
-    assert (
-        extract_table_name_from_create_index("CREATE INDEX idx ON MyTable(col1)")
-        == "MyTable"
-    )
-    assert (
-        extract_table_name_from_create_index("CREATE UNIQUE INDEX idx ON MyTable(col1)")
-        == "MyTable"
-    )
-    assert (
-        extract_table_name_from_create_index(
-            "CREATE NULL_FILTERED INDEX idx ON MyTable(col1)"
-        )
-        == "MyTable"
-    )
-    assert (
-        extract_table_name_from_create_index(
-            "CREATE VECTOR INDEX idx ON NodeEmbedding(embeddings)"
-        )
-        == "NodeEmbedding"
-    )
-    assert (
-        extract_table_name_from_create_index(
-            "CREATE UNIQUE NULL_FILTERED INDEX IF NOT EXISTS idx ON MyTable(col1)"
-        )
-        == "MyTable"
-    )

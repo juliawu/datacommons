@@ -212,4 +212,3 @@ def extract_graph_referenced_tables(stmt: str) -> tuple[list[str], list[str]]:
             node_tables.append(ref_node)
 
     return node_tables, edge_tables
-
