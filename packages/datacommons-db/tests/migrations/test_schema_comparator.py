@@ -26,6 +26,8 @@ from datacommons_db.clients.spanner_client import (
 from datacommons_db.migrations.verification.comparator import (
     ColumnMetadata,
     ConstraintMetadata,
+    IndexColumnMetadata,
+    IndexMetadata,
     PropertyGraphMetadata,
     SchemaMetadata,
     TableMetadata,
@@ -190,10 +192,63 @@ def test_compare_schemas_property_graph_metadata_mismatch():
     assert any("descriptor metadata mismatch" in d for d in result.differences)
 
 
+def test_compare_schemas_missing_index():
+    cols = (IndexColumnMetadata(column_name="subject_id", ordinal_position=1, column_ordering="ASC"),)
+    idx_a = {
+        "InEdge": IndexMetadata(
+            table_name="Edge",
+            index_name="InEdge",
+            index_type="INDEX",
+            is_unique=False,
+            is_null_filtered=False,
+            columns=cols,
+        )
+    }
+    schema_a = SchemaMetadata(indexes=idx_a)
+    schema_b = SchemaMetadata(indexes={})
+
+    result = compare_schemas(schema_a, schema_b)
+    assert result.is_match is False
+    assert any("Index 'InEdge' on table 'Edge' exists in Database A (Migrated) but is missing" in d for d in result.differences)
+
+
+def test_compare_schemas_index_property_or_column_mismatch():
+    cols_a = (IndexColumnMetadata(column_name="subject_id", ordinal_position=1, column_ordering="ASC"),)
+    cols_b = (IndexColumnMetadata(column_name="subject_id", ordinal_position=1, column_ordering="DESC"),)
+    idx_a = {
+        "InEdge": IndexMetadata(
+            table_name="Edge",
+            index_name="InEdge",
+            index_type="INDEX",
+            is_unique=False,
+            is_null_filtered=False,
+            columns=cols_a,
+        )
+    }
+    idx_b = {
+        "InEdge": IndexMetadata(
+            table_name="Edge",
+            index_name="InEdge",
+            index_type="INDEX",
+            is_unique=True,
+            is_null_filtered=True,
+            columns=cols_b,
+        )
+    }
+    schema_a = SchemaMetadata(indexes=idx_a)
+    schema_b = SchemaMetadata(indexes=idx_b)
+
+    result = compare_schemas(schema_a, schema_b)
+    assert result.is_match is False
+    assert any("uniqueness mismatch" in d for d in result.differences)
+    assert any("null-filtered mismatch" in d for d in result.differences)
+    assert any("columns mismatch" in d for d in result.differences)
+
+
 def test_extract_schema_metadata_with_mock_client():
     mock_client = MagicMock(spec=SpannerClient)
 
-    # Tables query
+    # Tables query, Columns query, Constraints query, Indexes query, Index columns query, Property graphs query
     mock_client.execute_query.side_effect = [
         QueryResult(
             status=ExecutionStatus.SUCCESS, rows=[["Node", "BASE TABLE", None]]
@@ -207,6 +262,14 @@ def test_extract_schema_metadata_with_mock_client():
         ),
         QueryResult(
             status=ExecutionStatus.SUCCESS,
+            rows=[["Edge", "InEdge", "INDEX", False, False]],
+        ),
+        QueryResult(
+            status=ExecutionStatus.SUCCESS,
+            rows=[["Edge", "InEdge", "object_id", 1, "ASC"]],
+        ),
+        QueryResult(
+            status=ExecutionStatus.SUCCESS,
             rows=[["DCGraph", json.dumps({"nodes": ["Node"]})]],
         ),
     ]
@@ -215,6 +278,10 @@ def test_extract_schema_metadata_with_mock_client():
     assert "Node" in schema.tables
     assert ("Node", "subject_id") in schema.columns
     assert ("Node", "PK_Node", 1) in schema.constraints
+    assert "InEdge" in schema.indexes
+    assert schema.indexes["InEdge"].table_name == "Edge"
+    assert len(schema.indexes["InEdge"].columns) == 1
+    assert schema.indexes["InEdge"].columns[0].column_name == "object_id"
     assert "DCGraph" in schema.property_graphs
     assert schema.property_graphs["DCGraph"].metadata == {"nodes": ["Node"]}
 

@@ -17,6 +17,8 @@
 from datacommons_db.migrations.verification.comparator import (
     ColumnMetadata,
     ConstraintMetadata,
+    IndexColumnMetadata,
+    IndexMetadata,
     PropertyGraphMetadata,
     SchemaDiffResult,
     SchemaMetadata,
@@ -40,6 +42,8 @@ __all__ = [
     "ColumnMetadata",
     "ConstraintMetadata",
     "DdlDependencyLevel",
+    "IndexColumnMetadata",
+    "IndexMetadata",
     "PropertyGraphMetadata",
     "SchemaDiffResult",
     "SchemaMetadata",

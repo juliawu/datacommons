@@ -78,6 +78,42 @@ class ConstraintMetadata:
 
 
 @dataclass(frozen=True)
+class IndexColumnMetadata:
+    """Metadata describing a column in an index.
+
+    Attributes:
+        column_name: Name of the column.
+        ordinal_position: Position of column in the index key (None for STORING columns).
+        column_ordering: Ordering of index column ('ASC', 'DESC', or None for STORING).
+    """
+
+    column_name: str
+    ordinal_position: int | None = None
+    column_ordering: str | None = None
+
+
+@dataclass(frozen=True)
+class IndexMetadata:
+    """Metadata describing a Cloud Spanner secondary index.
+
+    Attributes:
+        table_name: Target table of the index.
+        index_name: Name of the index.
+        index_type: Type of index (e.g. 'INDEX', 'SEARCH', 'VECTOR').
+        is_unique: True if index enforces unique constraint.
+        is_null_filtered: True if index is null-filtered.
+        columns: Tuple of IndexColumnMetadata instances in key order.
+    """
+
+    table_name: str
+    index_name: str
+    index_type: str
+    is_unique: bool
+    is_null_filtered: bool
+    columns: tuple[IndexColumnMetadata, ...] = ()
+
+
+@dataclass(frozen=True)
 class PropertyGraphMetadata:
     """Metadata describing a Spanner Property Graph definition.
 
@@ -98,6 +134,7 @@ class SchemaMetadata:
         tables: Mapping from table_name to TableMetadata.
         columns: Mapping from (table_name, column_name) to ColumnMetadata.
         constraints: Mapping from (table_name, constraint_name, ordinal_position) to ConstraintMetadata.
+        indexes: Mapping from index_name to IndexMetadata.
         property_graphs: Mapping from property_graph_name to PropertyGraphMetadata.
     """
 
@@ -106,6 +143,7 @@ class SchemaMetadata:
     constraints: dict[tuple[str, str, int], ConstraintMetadata] = field(
         default_factory=dict
     )
+    indexes: dict[str, IndexMetadata] = field(default_factory=dict)
     property_graphs: dict[str, PropertyGraphMetadata] = field(default_factory=dict)
 
 
@@ -276,7 +314,71 @@ def extract_schema_metadata(spanner_client: SpannerClient) -> SchemaMetadata:
             ordinal_position=ord_pos,
         )
 
-    # 4. Query Spanner Property Graphs
+    # 4. Query Secondary Indexes & Index Columns
+    indexes_query = (
+        "SELECT table_name, index_name, index_type, is_unique, is_null_filtered "
+        "FROM INFORMATION_SCHEMA.INDEXES "
+        "WHERE table_schema = '' AND index_type != 'PRIMARY_KEY' "
+        "ORDER BY table_name, index_name"
+    )
+    res_indexes = spanner_client.execute_query(indexes_query)
+    if res_indexes.status != ExecutionStatus.SUCCESS:
+        raise RuntimeError(
+            f"Failed to query INFORMATION_SCHEMA.INDEXES: {res_indexes.error_message}"
+        )
+
+    raw_indexes: dict[str, dict[str, Any]] = {}
+    for row in res_indexes.rows:
+        t_name, i_name, i_type = str(row[0]), str(row[1]), str(row[2])
+        is_uniq = bool(row[3])
+        is_null_flt = bool(row[4])
+        raw_indexes[i_name] = {
+            "table_name": t_name,
+            "index_name": i_name,
+            "index_type": i_type,
+            "is_unique": is_uniq,
+            "is_null_filtered": is_null_flt,
+            "columns": [],
+        }
+
+    index_cols_query = (
+        "SELECT table_name, index_name, column_name, ordinal_position, column_ordering "
+        "FROM INFORMATION_SCHEMA.INDEX_COLUMNS "
+        "WHERE table_schema = '' "
+        "ORDER BY table_name, index_name, ordinal_position"
+    )
+    res_index_cols = spanner_client.execute_query(index_cols_query)
+    if res_index_cols.status != ExecutionStatus.SUCCESS:
+        raise RuntimeError(
+            f"Failed to query INFORMATION_SCHEMA.INDEX_COLUMNS: {res_index_cols.error_message}"
+        )
+
+    for row in res_index_cols.rows:
+        _, i_name, col_name = str(row[0]), str(row[1]), str(row[2])
+        ord_pos = int(row[3]) if row[3] is not None else None
+        col_ord = str(row[4]) if row[4] is not None else None
+        if i_name in raw_indexes:
+            raw_indexes[i_name]["columns"].append(
+                IndexColumnMetadata(
+                    column_name=col_name,
+                    ordinal_position=ord_pos,
+                    column_ordering=col_ord,
+                )
+            )
+
+    indexes: dict[str, IndexMetadata] = {
+        i_name: IndexMetadata(
+            table_name=data["table_name"],
+            index_name=data["index_name"],
+            index_type=data["index_type"],
+            is_unique=data["is_unique"],
+            is_null_filtered=data["is_null_filtered"],
+            columns=tuple(data["columns"]),
+        )
+        for i_name, data in raw_indexes.items()
+    }
+
+    # 5. Query Spanner Property Graphs
     property_graphs: dict[str, PropertyGraphMetadata] = {}
     graph_query = (
         "SELECT property_graph_name, property_graph_metadata_json "
@@ -313,6 +415,7 @@ def extract_schema_metadata(spanner_client: SpannerClient) -> SchemaMetadata:
         tables=tables,
         columns=columns,
         constraints=constraints,
+        indexes=indexes,
         property_graphs=property_graphs,
     )
 
@@ -438,7 +541,53 @@ def compare_schemas(
                 f"Constraint '{c_name}' (pos {pos}) on table '{t_name}' column mismatch: '{cta.column_name}' in {name_a} vs '{ctb.column_name}' in {name_b}."
             )
 
-    # 4. Compare Property Graphs
+    # 4. Compare Indexes
+    idx_a = set(schema_a.indexes.keys())
+    idx_b = set(schema_b.indexes.keys())
+
+    missing_idx_in_b = sorted(idx_a - idx_b)
+    missing_idx_in_a = sorted(idx_b - idx_a)
+
+    diffs.extend(
+        [
+            f"Index '{idx}' on table '{schema_a.indexes[idx].table_name}' exists in {name_a} but is missing in {name_b}."
+            for idx in missing_idx_in_b
+        ]
+    )
+    diffs.extend(
+        [
+            f"Index '{idx}' on table '{schema_b.indexes[idx].table_name}' exists in {name_b} but is missing in {name_a}."
+            for idx in missing_idx_in_a
+        ]
+    )
+
+    common_idx = sorted(idx_a & idx_b)
+    for idx in common_idx:
+        ia = schema_a.indexes[idx]
+        ib = schema_b.indexes[idx]
+
+        if ia.table_name != ib.table_name:
+            diffs.append(
+                f"Index '{idx}' target table mismatch: '{ia.table_name}' in {name_a} vs '{ib.table_name}' in {name_b}."
+            )
+        if ia.index_type != ib.index_type:
+            diffs.append(
+                f"Index '{idx}' type mismatch: '{ia.index_type}' in {name_a} vs '{ib.index_type}' in {name_b}."
+            )
+        if ia.is_unique != ib.is_unique:
+            diffs.append(
+                f"Index '{idx}' uniqueness mismatch: {ia.is_unique} in {name_a} vs {ib.is_unique} in {name_b}."
+            )
+        if ia.is_null_filtered != ib.is_null_filtered:
+            diffs.append(
+                f"Index '{idx}' null-filtered mismatch: {ia.is_null_filtered} in {name_a} vs {ib.is_null_filtered} in {name_b}."
+            )
+        if ia.columns != ib.columns:
+            diffs.append(
+                f"Index '{idx}' columns mismatch: {ia.columns} in {name_a} vs {ib.columns} in {name_b}."
+            )
+
+    # 5. Compare Property Graphs
     pg_a = set(schema_a.property_graphs.keys())
     pg_b = set(schema_b.property_graphs.keys())
 
