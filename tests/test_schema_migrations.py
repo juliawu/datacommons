@@ -153,46 +153,49 @@ def spanner_instance():
 def ephemeral_database_pair(spanner_instance):
     """Creates a pair of ephemeral databases on the emulator with step tracking.
 
-    Tears down and drops both databases upon test completion.
+    Tears down and drops both databases upon test completion. Guarantees cleanup
+    even if setup fails partway through.
     """
     uid = uuid.uuid4().hex[:8]
     db_migrated_id = f"db_migrated_{uid}"
     db_target_id = f"db_target_{uid}"
-
-    with step_progress(
-        f"[Setup] Creating ephemeral databases ({db_migrated_id}, {db_target_id})"
-    ):
-        db_migrated = spanner_instance.database(db_migrated_id)
-        op_a = db_migrated.create()
-        op_a.result(timeout=60)
-
-        db_target = spanner_instance.database(db_target_id)
-        op_b = db_target.create()
-        op_b.result(timeout=60)
-
-    client_a = SpannerClient(
-        project_id=PROJECT_ID,
-        instance_id=INSTANCE_ID,
-        database_id=db_migrated_id,
-        credentials=AnonymousCredentials(),
-    )
-    client_b = SpannerClient(
-        project_id=PROJECT_ID,
-        instance_id=INSTANCE_ID,
-        database_id=db_target_id,
-        credentials=AnonymousCredentials(),
-    )
+    created_dbs = []
 
     try:
-        yield client_a, client_b
-    finally:
         with step_progress(
-            f"[Teardown] Dropping ephemeral databases ({db_migrated_id}, {db_target_id})"
+            f"[Setup] Creating ephemeral databases ({db_migrated_id}, {db_target_id})"
         ):
-            with contextlib.suppress(Exception):
-                db_migrated.drop()
-            with contextlib.suppress(Exception):
-                db_target.drop()
+            db_migrated = spanner_instance.database(db_migrated_id)
+            op_a = db_migrated.create()
+            op_a.result(timeout=60)
+            created_dbs.append(db_migrated)
+
+            db_target = spanner_instance.database(db_target_id)
+            op_b = db_target.create()
+            op_b.result(timeout=60)
+            created_dbs.append(db_target)
+
+        client_migrated = SpannerClient(
+            project_id=PROJECT_ID,
+            instance_id=INSTANCE_ID,
+            database_id=db_migrated_id,
+            credentials=AnonymousCredentials(),
+        )
+        client_target = SpannerClient(
+            project_id=PROJECT_ID,
+            instance_id=INSTANCE_ID,
+            database_id=db_target_id,
+            credentials=AnonymousCredentials(),
+        )
+
+        yield client_migrated, client_target
+    finally:
+        if created_dbs:
+            names = ", ".join(db.database_id for db in created_dbs)
+            with step_progress(f"[Teardown] Dropping ephemeral databases ({names})"):
+                for db in created_dbs:
+                    with contextlib.suppress(Exception):
+                        db.drop()
 
 
 # ==============================================================================
