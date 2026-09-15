@@ -16,7 +16,7 @@
 
 Verifies that:
 1. Applying baseline seeding followed by sequential chronological migrations
-   produces an identical schema state to applying the golden schema.sql directly.
+   produces an identical schema state to applying target schema_latest.sql directly.
 2. Topological dependency ordering constraints are satisfied.
 3. Migrations are idempotent.
 """
@@ -44,24 +44,24 @@ from datacommons_db.migrations.verification.validator import (
 from google.auth.credentials import AnonymousCredentials
 from google.cloud import spanner
 
-SCHEMA_SQL_PATH = (
+SCHEMA_LATEST_SQL_PATH = (
     Path(__file__).resolve().parents[1]
     / "packages"
     / "datacommons-db"
     / "datacommons_db"
     / "migrations"
     / "schemas"
-    / "schema.sql"
+    / "schema_latest.sql"
 )
 
-BASELINE_SQL_PATH = (
+SCHEMA_BASELINE_SQL_PATH = (
     Path(__file__).resolve().parents[1]
     / "packages"
     / "datacommons-db"
     / "datacommons_db"
     / "migrations"
     / "schemas"
-    / "baseline_schema.sql"
+    / "schema_baseline.sql"
 )
 
 PROJECT_ID = os.getenv("SPANNER_PROJECT_ID", "test-project")
@@ -157,17 +157,17 @@ def ephemeral_database_pair(spanner_instance):
     """
     uid = uuid.uuid4().hex[:8]
     db_migrated_id = f"db_migrated_{uid}"
-    db_golden_id = f"db_golden_{uid}"
+    db_target_id = f"db_target_{uid}"
 
     with step_progress(
-        f"[Setup] Creating ephemeral databases ({db_migrated_id}, {db_golden_id})"
+        f"[Setup] Creating ephemeral databases ({db_migrated_id}, {db_target_id})"
     ):
         db_migrated = spanner_instance.database(db_migrated_id)
         op_a = db_migrated.create()
         op_a.result(timeout=60)
 
-        db_golden = spanner_instance.database(db_golden_id)
-        op_b = db_golden.create()
+        db_target = spanner_instance.database(db_target_id)
+        op_b = db_target.create()
         op_b.result(timeout=60)
 
     client_a = SpannerClient(
@@ -179,7 +179,7 @@ def ephemeral_database_pair(spanner_instance):
     client_b = SpannerClient(
         project_id=PROJECT_ID,
         instance_id=INSTANCE_ID,
-        database_id=db_golden_id,
+        database_id=db_target_id,
         credentials=AnonymousCredentials(),
     )
 
@@ -187,12 +187,12 @@ def ephemeral_database_pair(spanner_instance):
         yield client_a, client_b
     finally:
         with step_progress(
-            f"[Teardown] Dropping ephemeral databases ({db_migrated_id}, {db_golden_id})"
+            f"[Teardown] Dropping ephemeral databases ({db_migrated_id}, {db_target_id})"
         ):
             with contextlib.suppress(Exception):
                 db_migrated.drop()
             with contextlib.suppress(Exception):
-                db_golden.drop()
+                db_target.drop()
 
 
 # ==============================================================================
@@ -200,35 +200,37 @@ def ephemeral_database_pair(spanner_instance):
 # ==============================================================================
 
 
-def test_golden_schema_exists_and_is_non_empty():
-    """Verify that schema.sql exists and contains valid DDL statements."""
-    assert SCHEMA_SQL_PATH.is_file(), f"Missing golden schema file at {SCHEMA_SQL_PATH}"
-    statements = load_ddl_statements(SCHEMA_SQL_PATH)
+def test_latest_schema_exists_and_is_non_empty():
+    """Verify that schema_latest.sql exists and contains valid DDL statements."""
+    assert (
+        SCHEMA_LATEST_SQL_PATH.is_file()
+    ), f"Missing target schema file at {SCHEMA_LATEST_SQL_PATH}"
+    statements = load_ddl_statements(SCHEMA_LATEST_SQL_PATH)
     assert len(statements) >= 4, (
-        f"schema.sql should contain at least 4 DDL statements, found {len(statements)}"
+        f"schema_latest.sql should contain at least 4 DDL statements, found {len(statements)}"
     )
 
 
 def test_baseline_schema_exists_and_is_non_empty():
-    """Verify that baseline_schema.sql exists and contains valid DDL statements."""
-    assert BASELINE_SQL_PATH.is_file(), (
-        f"Missing baseline schema file at {BASELINE_SQL_PATH}"
-    )
-    statements = load_ddl_statements(BASELINE_SQL_PATH)
+    """Verify that schema_baseline.sql exists and contains valid DDL statements."""
+    assert (
+        SCHEMA_BASELINE_SQL_PATH.is_file()
+    ), f"Missing baseline schema file at {SCHEMA_BASELINE_SQL_PATH}"
+    statements = load_ddl_statements(SCHEMA_BASELINE_SQL_PATH)
     assert len(statements) >= 3, (
-        f"baseline_schema.sql should contain at least 3 DDL statements, found {len(statements)}"
+        f"schema_baseline.sql should contain at least 3 DDL statements, found {len(statements)}"
     )
 
 
-def test_golden_schema_ddl_topological_ordering():
-    """Verify that schema.sql satisfies topological dependency constraints."""
-    statements = load_ddl_statements(SCHEMA_SQL_PATH)
+def test_latest_schema_ddl_topological_ordering():
+    """Verify that schema_latest.sql satisfies topological dependency constraints."""
+    statements = load_ddl_statements(SCHEMA_LATEST_SQL_PATH)
     assert_valid_ddl_topological_order(statements)
 
 
 def test_baseline_schema_ddl_topological_ordering():
-    """Verify that baseline_schema.sql satisfies topological dependency constraints."""
-    statements = load_ddl_statements(BASELINE_SQL_PATH)
+    """Verify that schema_baseline.sql satisfies topological dependency constraints."""
+    statements = load_ddl_statements(SCHEMA_BASELINE_SQL_PATH)
     assert_valid_ddl_topological_order(statements)
 
 
@@ -237,13 +239,13 @@ def test_baseline_schema_ddl_topological_ordering():
 # ==============================================================================
 
 
-def test_migrated_schema_matches_golden_schema(ephemeral_database_pair):
-    """Verify that baseline + sequential migrations produces an identical schema to schema.sql."""
-    client_migrated, client_golden = ephemeral_database_pair
+def test_migrated_schema_matches_target_schema(ephemeral_database_pair):
+    """Verify that baseline + sequential migrations produces an identical schema to schema_latest.sql."""
+    client_migrated, client_target = ephemeral_database_pair
 
     # 1. Setup Database A (Migrated): Apply baseline DDL
     with step_progress("[1/4] Applying baseline schema DDL to Database A (Migrated)"):
-        baseline_ddls = load_ddl_statements(BASELINE_SQL_PATH)
+        baseline_ddls = load_ddl_statements(SCHEMA_BASELINE_SQL_PATH)
         res_baseline = client_migrated.execute_ddl(baseline_ddls)
         assert res_baseline.status == ExecutionStatus.SUCCESS, (
             f"Failed to apply baseline schema to Database A: {res_baseline.error_message}"
@@ -257,12 +259,12 @@ def test_migrated_schema_matches_golden_schema(ephemeral_database_pair):
             "One or more migrations failed during execution on Database A"
         )
 
-    # 3. Setup Database B (Golden): Apply schema.sql directly
-    with step_progress("[3/4] Applying golden schema.sql DDL to Database B (Golden)"):
-        golden_ddls = load_ddl_statements(SCHEMA_SQL_PATH)
-        res_golden = client_golden.execute_ddl(golden_ddls)
-        assert res_golden.status == ExecutionStatus.SUCCESS, (
-            f"Failed to apply golden schema.sql to Database B: {res_golden.error_message}"
+    # 3. Setup Database B (Target): Apply schema_latest.sql directly
+    with step_progress("[3/4] Applying target schema_latest.sql DDL to Database B (Target)"):
+        target_ddls = load_ddl_statements(SCHEMA_LATEST_SQL_PATH)
+        res_target = client_target.execute_ddl(target_ddls)
+        assert res_target.status == ExecutionStatus.SUCCESS, (
+            f"Failed to apply target schema_latest.sql to Database B: {res_target.error_message}"
         )
 
     # 4. Extract INFORMATION_SCHEMA metadata from both databases and compare
@@ -270,17 +272,17 @@ def test_migrated_schema_matches_golden_schema(ephemeral_database_pair):
         "[4/4] Extracting INFORMATION_SCHEMA & validating schema equality"
     ):
         schema_a = extract_schema_metadata(client_migrated)
-        schema_b = extract_schema_metadata(client_golden)
+        schema_b = extract_schema_metadata(client_target)
 
         diff_result = compare_schemas(
             schema_a,
             schema_b,
             name_a="Database A (Migrated)",
-            name_b="Database B (Golden)",
+            name_b="Database B (Target)",
         )
 
         assert diff_result.is_match is True, (
-            "Schema mismatch detected between Migrated Database and Golden schema.sql:\n"
+            "Schema mismatch detected between Migrated Database and Target schema_latest.sql:\n"
             + "\n".join(f"  - {d}" for d in diff_result.differences)
         )
 
@@ -293,7 +295,7 @@ def test_schema_migration_idempotency(ephemeral_database_pair):
     with step_progress(
         "[1/2] Seeding initial database and applying initial migrations"
     ):
-        baseline_ddls = load_ddl_statements(BASELINE_SQL_PATH)
+        baseline_ddls = load_ddl_statements(SCHEMA_BASELINE_SQL_PATH)
         client_migrated.execute_ddl(baseline_ddls)
 
         runner = MigrationRunner(spanner_client=client_migrated)

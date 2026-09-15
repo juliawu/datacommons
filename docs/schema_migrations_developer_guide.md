@@ -142,11 +142,11 @@ class Migration(SchemaMigration):
 
 ---
 
-## 5. Golden `schema.sql` Synchronization
+## 5. Target `schema_latest.sql` Synchronization
 
-Whenever you add or modify a migration script, you **must also update the golden `schema.sql` file** ([`packages/datacommons-db/datacommons_db/migrations/schemas/schema.sql`](../packages/datacommons-db/datacommons_db/migrations/schemas/schema.sql)).
+Whenever you add or modify a migration script, you **must also update the target `schema_latest.sql` file** ([`packages/datacommons-db/datacommons_db/migrations/schemas/schema_latest.sql`](../packages/datacommons-db/datacommons_db/migrations/schemas/schema_latest.sql)).
 
-`schema.sql` serves as the authoritative single source of truth for the complete database schema state. Automated CI tests will verify that applying all sequential migrations to a fresh database produces a schema strictly identical to executing `schema.sql` directly.
+`schema_latest.sql` serves as the authoritative single source of truth for the complete target database schema state. Automated CI tests will verify that applying all sequential migrations to a fresh database produces a schema strictly identical to executing `schema_latest.sql` directly.
 
 ---
 
@@ -167,7 +167,7 @@ uv run pytest packages/datacommons-db/tests/migrations/test_dependency_validator
 ```
 
 ### 3. Run End-to-End Migration Test (Cloud Spanner Emulator)
-Executes the dual-database migration verification test (`db_migrated` vs. `db_golden`):
+Executes the dual-database migration verification test (`db_migrated` vs. `db_target`):
 
 #### Start the Spanner Emulator via Docker:
 ```bash

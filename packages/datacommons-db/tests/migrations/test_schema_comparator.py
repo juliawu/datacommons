@@ -97,10 +97,10 @@ def test_compare_schemas_missing_table():
         }
     )
 
-    result = compare_schemas(schema_a, schema_b, name_a="Migrated", name_b="Golden")
+    result = compare_schemas(schema_a, schema_b, name_a="Migrated", name_b="Target")
     assert result.is_match is False
     assert any(
-        "Table 'Edge' exists in Golden but is missing in Migrated" in d
+        "Table 'Edge' exists in Target but is missing in Migrated" in d
         for d in result.differences
     )
 
@@ -144,7 +144,7 @@ def test_compare_schemas_column_missing():
     result = compare_schemas(schema_a, schema_b)
     assert result.is_match is False
     assert any(
-        "Column 'Node.value' exists in Database B (Golden) but is missing" in d
+        "Column 'Node.value' exists in Database B (Target) but is missing" in d
         for d in result.differences
     )
 

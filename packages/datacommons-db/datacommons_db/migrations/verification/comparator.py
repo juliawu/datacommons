@@ -321,13 +321,13 @@ def compare_schemas(
     schema_a: SchemaMetadata,
     schema_b: SchemaMetadata,
     name_a: str = "Database A (Migrated)",
-    name_b: str = "Database B (Golden)",
+    name_b: str = "Database B (Target)",
 ) -> SchemaDiffResult:
     """Perform a deep canonical comparison between two SchemaMetadata instances.
 
     Args:
         schema_a: Migrated database schema state.
-        schema_b: Target golden database schema state.
+        schema_b: Target database schema state.
         name_a: Display name for Database A in diff reports.
         name_b: Display name for Database B in diff reports.
 
