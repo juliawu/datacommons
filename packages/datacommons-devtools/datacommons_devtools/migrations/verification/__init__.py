@@ -14,7 +14,7 @@
 
 """Schema migration verification, comparison, and topological ordering analysis."""
 
-from datacommons_db.migrations.verification.comparator import (
+from datacommons_devtools.migrations.verification.comparator import (
     ColumnMetadata,
     ConstraintMetadata,
     IndexColumnMetadata,
@@ -28,7 +28,7 @@ from datacommons_db.migrations.verification.comparator import (
     extract_schema_metadata,
     load_ddl_statements,
 )
-from datacommons_db.migrations.verification.validator import (
+from datacommons_devtools.migrations.verification.validator import (
     DdlDependencyLevel,
     assert_valid_ddl_topological_order,
     extract_graph_referenced_tables,

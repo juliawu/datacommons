@@ -24,7 +24,7 @@ from datacommons_db.clients.spanner_client import (
     QueryResult,
     SpannerClient,
 )
-from datacommons_db.migrations.verification.comparator import (
+from datacommons_devtools.migrations.verification.comparator import (
     ColumnMetadata,
     ConstraintMetadata,
     IndexColumnMetadata,
@@ -73,7 +73,10 @@ def test_load_ddl_statements_skips_unrendered_template_statements(caplog):
     assert len(statements) == 2
     assert statements[0].startswith("CREATE TABLE Person")
     assert statements[1].startswith("CREATE INDEX idx_person")
-    assert "Skipping unrendered template DDL statement: CREATE TABLE {{ embedding_table }} (" in caplog.text
+    assert (
+        "Skipping unrendered template DDL statement: CREATE TABLE {{ embedding_table }} ("
+        in caplog.text
+    )
 
 
 def test_canonical_sort_json_recursively_sorts():
@@ -114,12 +117,16 @@ def test_compare_schemas_exact_match():
 
 def test_compare_schemas_different_column_order_matches():
     cols_a = {
-        ("Node", "subject_id"): ColumnMetadata("Node", "subject_id", "STRING(1024)", "NO"),
+        ("Node", "subject_id"): ColumnMetadata(
+            "Node", "subject_id", "STRING(1024)", "NO"
+        ),
         ("Node", "name"): ColumnMetadata("Node", "name", "STRING(MAX)", "YES"),
     }
     cols_b = {
         ("Node", "name"): ColumnMetadata("Node", "name", "STRING(MAX)", "YES"),
-        ("Node", "subject_id"): ColumnMetadata("Node", "subject_id", "STRING(1024)", "NO"),
+        ("Node", "subject_id"): ColumnMetadata(
+            "Node", "subject_id", "STRING(1024)", "NO"
+        ),
     }
     schema_a = SchemaMetadata(columns=cols_a)
     schema_b = SchemaMetadata(columns=cols_b)
@@ -232,7 +239,11 @@ def test_compare_schemas_property_graph_metadata_mismatch():
 
 
 def test_compare_schemas_missing_index():
-    cols = (IndexColumnMetadata(column_name="subject_id", ordinal_position=1, column_ordering="ASC"),)
+    cols = (
+        IndexColumnMetadata(
+            column_name="subject_id", ordinal_position=1, column_ordering="ASC"
+        ),
+    )
     idx_a = {
         "InEdge": IndexMetadata(
             table_name="Edge",
@@ -248,12 +259,24 @@ def test_compare_schemas_missing_index():
 
     result = compare_schemas(schema_a, schema_b)
     assert result.is_match is False
-    assert any("Index 'InEdge' on table 'Edge' exists in Database A (Migrated) but is missing" in d for d in result.differences)
+    assert any(
+        "Index 'InEdge' on table 'Edge' exists in Database A (Migrated) but is missing"
+        in d
+        for d in result.differences
+    )
 
 
 def test_compare_schemas_index_property_or_column_mismatch():
-    cols_a = (IndexColumnMetadata(column_name="subject_id", ordinal_position=1, column_ordering="ASC"),)
-    cols_b = (IndexColumnMetadata(column_name="subject_id", ordinal_position=1, column_ordering="DESC"),)
+    cols_a = (
+        IndexColumnMetadata(
+            column_name="subject_id", ordinal_position=1, column_ordering="ASC"
+        ),
+    )
+    cols_b = (
+        IndexColumnMetadata(
+            column_name="subject_id", ordinal_position=1, column_ordering="DESC"
+        ),
+    )
     idx_a = {
         "InEdge": IndexMetadata(
             table_name="Edge",

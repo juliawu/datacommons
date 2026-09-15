@@ -418,10 +418,14 @@ name = "datacommons-devtools"
 source = { editable = "packages/datacommons-devtools" }
 dependencies = [
     { name = "click" },
+    { name = "datacommons-db" },
 ]
 
 [package.metadata]
-requires-dist = [{ name = "click", specifier = ">=8.1.7" }]
+requires-dist = [
+    { name = "click", specifier = ">=8.1.7" },
+    { name = "datacommons-db", editable = "packages/datacommons-db" },
+]
 
 [[package]]
 name = "datacommons-platform"

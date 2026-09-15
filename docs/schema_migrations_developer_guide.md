@@ -161,9 +161,9 @@ uv run pytest packages/datacommons-db/tests/migrations/test_migration_scripts.py
 ```
 
 ### 2. Validate Topological DDL Ordering & Comparator
-Verifies that statements conform to Spanner's 4-level compilation order (Base Tables → Edge Tables → Secondary Indexes → Property Graphs):
+Verifies that statements conform to Spanner's 4-level compilation order (Base Tables → Edge Tables → Secondary Indexes → Property Graphs) and checks schema file integrity:
 ```bash
-uv run pytest packages/datacommons-db/tests/migrations/test_dependency_validator.py packages/datacommons-db/tests/migrations/test_schema_comparator.py
+uv run pytest packages/datacommons-devtools/tests/migrations/verification/test_dependency_validator.py packages/datacommons-devtools/tests/migrations/verification/test_schema_comparator.py packages/datacommons-devtools/tests/migrations/verification/test_schema_static.py
 ```
 
 ### 3. Run End-to-End Migration Test (Cloud Spanner Emulator)
@@ -178,7 +178,7 @@ docker run -d --name spanner-emulator -p 9010:9010 -p 9020:9020 gcr.io/cloud-spa
 export SPANNER_EMULATOR_HOST="localhost:9010"
 
 # 3. Run end-to-end schema migration test suite
-uv run pytest tests/test_schema_migrations.py -s
+uv run pytest packages/datacommons-devtools/tests/migrations/verification/test_schema_live.py -s
 ```
 
 *(Optional) Stop the emulator container when finished:*
@@ -190,6 +190,6 @@ docker stop spanner-emulator && docker rm spanner-emulator
 
 ### 4. Run Linter and Formatting Checks
 ```bash
-uv run ruff check packages/datacommons-db/datacommons_db/migrations/ tests/test_schema_migrations.py
-uv run ruff format --check packages/datacommons-db/datacommons_db/migrations/ tests/test_schema_migrations.py
+uv run ruff check packages/datacommons-db/datacommons_db/migrations/ packages/datacommons-devtools/
+uv run ruff format --check packages/datacommons-db/datacommons_db/migrations/ packages/datacommons-devtools/
 ```
